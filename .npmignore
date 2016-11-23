@@ -1,0 +1,8 @@
+# Knock out all the dev crud.
+/node_modules
+/npm-debug.log
+/.*
+/scripts
+/test
+/test-util.js
+/TODO.md

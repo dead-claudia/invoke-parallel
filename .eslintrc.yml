@@ -1,0 +1,6 @@
+root: true
+plugins:
+    - invoke-parallel-rules
+extends:
+    - isiahmeadows/node-4
+    - plugin:invoke-parallel-rules/config

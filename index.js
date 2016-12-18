@@ -6,6 +6,7 @@ const api = require("./lib/api")
 const parent = module.parent
 
 exports.Retry = api.Retry
+exports.Cancel = api.Cancel
 exports.cancelToken = api.cancelToken
 exports.globalPool = api.globalPool
 exports.pool = api.pool

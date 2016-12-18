@@ -15,9 +15,9 @@ Simple worker pools done right.
 
 ***Note: This is currently considered pre-alpha, and most definitely shouldn't be used in production.*** There are [major missing features, unfixed bugs, and plenty of other issues](https://github.com/isiahmeadows/invoke-parallel/blob/master/TODO.md) that need addressed before I can declare it stable.
 
-## Installation
+## Getting Started
 
-Run this:
+Install this from [npm](https://www.npmjs.com/package/invoke-parallel):
 
 ```
 $ npm install --save invoke-parallel

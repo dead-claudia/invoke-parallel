@@ -19,5 +19,8 @@
     "eslint": "^3.12.2",
     "eslint-config-isiahmeadows": "^0.1.8",
     "thallium": "^0.3.9"
-  }
+  },
+  "homepage": "http://github.com/isiahmeadows/invoke-parallel",
+  "bugs": "http://github.com/isiahmeadows/invoke-parallel/issues",
+  "repository": "http://github.com/isiahmeadows/invoke-parallel.git"
 }

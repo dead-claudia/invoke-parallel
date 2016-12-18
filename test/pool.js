@@ -361,7 +361,7 @@ t.test("pool", () => { // eslint-disable-line max-statements
 
         t.test("maxPerChild() default", () => {
             init()
-            assert.equal(pool.options().maxPerChild, 0)
+            assert.equal(pool.options().maxPerChild, 25)
         })
     })
 

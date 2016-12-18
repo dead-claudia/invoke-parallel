@@ -2,7 +2,7 @@
 
 Here's my TODO list, in order of decreasing importance. I have some of the features tagged with a specific minor version to denote what version I hope to have it in by, to give some semblance of a roadmap.
 
-(Note: 1-5 are all absolute blockers for going even beta, and 6-8 are blockers for going stable. 9+ are nice to haves)
+(Note: 1-6 are all absolute blockers for going even beta, and 7-9 are blockers for going stable. 10+ are nice to haves)
 
 ## Critical
 
@@ -70,38 +70,40 @@ These are all blockers for going beta, since they're moderately critical feature
 
 5. Allow modules to default-export a promise, which will pave the way for async module loaders (e.g. AMD, `import` proposal).
 
+6. Allow direct evaluation of a function, using `vm` to sandbox it.
+
 ## Medium
 
 These are all blockers for going stable, since they deal more with stability and polish than missing functionality.
 
-6. (v0.4) Add preloading support by option:
+7. (v0.4) Add preloading support by option:
 
     - Pool-level, for all processes.
     - Module-level, for individual modules (managed as in-memory dependencies).
     - Allows for use of require hooks/etc.
 
-7. (v0.5) Allow killing a pool entirely, with all existing processes.
+8. (v0.5) Allow killing a pool entirely, with all existing processes.
 
     - An option should be given to close it gracefully (scheduling results in a sync `ReferenceError`, but existing processes aren't terminated) or forcefully (outstanding tasks rejected immediately with a `invoke.PoolDeath`, and scheduling results in a `ReferenceError`).
     - Returns a Promise resolved when pool is successfully killed.
     - Returns an already-resolved Promise when pool is already dead.
     - The default pool should always remain unkillable, and should be detectable without requiring importing the module.
 
-8. (v0.6) Switch the scheduling algorithm to use highest response ratio next, and track average call duration for each method (last N calls for some small but usable N). This will allow for far better cross-module scheduling, especially with the default pool and the later item with process priority/deadlines. Also, make the process finding sublinear, preferably constant, so it can provide better real-time guarantees.
+9. (v0.6) Switch the scheduling algorithm to use highest response ratio next, and track average call duration for each method (last N calls for some small but usable N). This will allow for far better cross-module scheduling, especially with the default pool and the later item with process priority/deadlines. Also, make the process finding sublinear, preferably constant, so it can provide better real-time guarantees.
 
 ## Lower
 
 These won't block the stable release (or any minor release), because they're mainly focused on features, not functionality.
 
-9. Port this to browsers using shared web workers.
+10. Port this to browsers using shared web workers.
 
-10. Make the loader configurable per-module, at the pool level. Useful mainly for browsers, where there may not necessarily be a default loader, or even if there is, it's not always practical for some use cases.
+11. Make the loader configurable per-module, at the pool level. Useful mainly for browsers, where there may not necessarily be a default loader, or even if there is, it's not always practical for some use cases.
 
-11. Allow scheduling tasks that require process locks and/or increased priority and/or deadlines. This shouldn't be too difficult to add after the scheduling algorithm settles down, but will complicate the pool substantially.
+12. Allow scheduling tasks that require process locks and/or increased priority and/or deadlines. This shouldn't be too difficult to add after the scheduling algorithm settles down, but will complicate the pool substantially.
 
-12. In workers, make them able to know their worker status.
+13. In workers, make them able to know their worker status.
 
-13. Make workers' default pool the pool they're contained in, unless they're isolated.
+14. Make workers' default pool the pool they're contained in, unless they're isolated.
 
     - This will require broadcasting to the parent and other loaded modules status updates when tasks are created.
     - This will require a dedicated shared process (across all pools) for coordinating scheduling, for performance reasons.

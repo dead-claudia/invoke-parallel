@@ -1,14 +1,14 @@
 # TODOs
 
-Here's my TODO list, in order of decreasing importance.
+Here's my TODO list, in order of decreasing importance. I have some of the features tagged with a specific minor version to denote what version I hope to have it in by, to give some semblance of a roadmap.
 
-(Note: 1-4 are all absolute blockers for going even beta, and 5-7 are blockers for going stable. 8-10 are nice to haves)
+(Note: 1-5 are all absolute blockers for going even beta, and 6-8 are blockers for going stable. 9+ are nice to haves)
 
 ## Critical
 
 These are all blocker for going alpha, since they're highly critical features.
 
-1. Allow [async iterators](https://github.com/tc39/proposal-async-iteration) and [observables](https://github.com/tc39/proposal-observable) to be returned.
+1. (v0.1) Allow [async iterators](https://github.com/tc39/proposal-async-iteration) and [observables](https://github.com/tc39/proposal-observable) to be returned.
 
     - This blocks one of my primary needs for this.
     - This would make 2 even more imperative for performance reasons (binary transfer).
@@ -30,7 +30,7 @@ These are all blocker for going alpha, since they're highly critical features.
     - Async iterators/generators: An object with the proper methods, and polyfill `Symbol.asyncIterator` as appropriate.
     - Observables: An instance of a local ponyfill, and polyfill `Symbol.observable` as appropriate.
 
-2. Route this module's IPC communication through fd 4 (sockets still through `process.send` and fd 3), with a special-purpose binary protocol.
+2. (v0.2) Route this module's IPC communication through fd 4 (sockets still through `process.send` and fd 3), with a special-purpose binary protocol.
 
     - Use a modified version of HTML's structured cloning for object transfer.
         - Preserve dates, errors (including native type and stack), buffers, sockets, and servers.
@@ -52,7 +52,7 @@ These are all blocker for going alpha, since they're highly critical features.
 
     It may potentially make certain bits of data less costly to transmit, so I may be able to get away with less heap data in JS land.
 
-3. Catch and report process-fatal errors.
+3. (v0.3) Catch and report process-fatal errors.
 
     - Reject the currently executing methods with the error.
     - Reject the rest with a `Retry`.
@@ -62,7 +62,7 @@ These are all blocker for going alpha, since they're highly critical features.
 
 These are all blockers for going beta, since they're moderately critical features, but won't cause substantial problems if they're missing.
 
-4. Use domains to catch errors, localized to a particular module/method.
+4. (v0.3.x) Use domains to catch errors, localized to a particular module/method.
 
     - Reject the currently executing method with the error.
     - Reject the rest with a `Retry`.
@@ -70,44 +70,38 @@ These are all blockers for going beta, since they're moderately critical feature
 
 5. Allow modules to default-export a promise, which will pave the way for async module loaders (e.g. AMD, `import` proposal).
 
-6. Add preloading support by option:
-
-    - Pool-level, for all processes.
-    - Module-level, for individual modules (managed as in-memory dependencies).
-    - Allows for use of require hooks/etc.
-
 ## Medium
 
 These are all blockers for going stable, since they deal more with stability and polish than missing functionality.
 
-7. Add preloading support by option:
+6. (v0.4) Add preloading support by option:
 
     - Pool-level, for all processes.
     - Module-level, for individual modules (managed as in-memory dependencies).
     - Allows for use of require hooks/etc.
 
-8. Allow killing a pool entirely, with all existing processes.
+7. (v0.5) Allow killing a pool entirely, with all existing processes.
 
     - An option should be given to close it gracefully (scheduling results in a sync `ReferenceError`, but existing processes aren't terminated) or forcefully (outstanding tasks rejected immediately with a `invoke.PoolDeath`, and scheduling results in a `ReferenceError`).
     - Returns a Promise resolved when pool is successfully killed.
     - Returns an already-resolved Promise when pool is already dead.
     - The default pool should always remain unkillable, and should be detectable without requiring importing the module.
 
-9. Switch the scheduling algorithm to use highest response ratio next, and track average call duration for each method (last N calls for some small but usable N). This will allow for far better cross-module scheduling, especially with the default pool and the later item with process priority/deadlines. Also, make the process finding sublinear, preferably constant, so it can provide better real-time guarantees.
+8. (v0.6) Switch the scheduling algorithm to use highest response ratio next, and track average call duration for each method (last N calls for some small but usable N). This will allow for far better cross-module scheduling, especially with the default pool and the later item with process priority/deadlines. Also, make the process finding sublinear, preferably constant, so it can provide better real-time guarantees.
 
 ## Lower
 
 These won't block the stable release (or any minor release), because they're mainly focused on features, not functionality.
 
-10. Port this to browsers using shared web workers.
+9. Port this to browsers using shared web workers.
 
-11. Make the loader configurable per-module, at the pool level. Useful mainly for browsers, where there may not necessarily be a default loader, or even if there is, it's not always practical for some use cases.
+10. Make the loader configurable per-module, at the pool level. Useful mainly for browsers, where there may not necessarily be a default loader, or even if there is, it's not always practical for some use cases.
 
-12. Allow scheduling tasks that require process locks and/or increased priority and/or deadlines. This shouldn't be too difficult to add after the scheduling algorithm settles down, but will complicate the pool substantially.
+11. Allow scheduling tasks that require process locks and/or increased priority and/or deadlines. This shouldn't be too difficult to add after the scheduling algorithm settles down, but will complicate the pool substantially.
 
-13. In workers, make them able to know their worker status.
+12. In workers, make them able to know their worker status.
 
-14. Make workers' default pool the pool they're contained in, unless they're isolated.
+13. Make workers' default pool the pool they're contained in, unless they're isolated.
 
     - This will require broadcasting to the parent and other loaded modules status updates when tasks are created.
     - This will require a dedicated shared process (across all pools) for coordinating scheduling, for performance reasons.

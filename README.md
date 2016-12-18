@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/isiahmeadows/invoke-parallel.svg?branch=master)](https://travis-ci.org/isiahmeadows/invoke-parallel)
+
 # invoke-parallel
 
 Simple worker pools done right.

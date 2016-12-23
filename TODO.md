@@ -8,27 +8,21 @@ Here's my TODO list, in order of decreasing importance. I have some of the featu
 
 These are all blocker for going alpha, since they're highly critical features.
 
-1. (v0.1) Allow [async iterators](https://github.com/tc39/proposal-async-iteration) and [observables](https://github.com/tc39/proposal-observable) to be returned.
+1. (v0.1) Allow [async iterators](https://github.com/tc39/proposal-async-iteration) to be returned.
 
     - This blocks one of my primary needs for this.
     - This would make 2 even more imperative for performance reasons (binary transfer).
-    - Individual `next`/etc. calls should not be cancellable - just not call the method and/or ignore the result instead.
+    - Individual `next`/etc. calls should not be cancellable - just don't call the method and/or buffer the result and/or ignore the result instead.
 
-    The APIs will be like this:
+    The API will be like this:
 
-    - Iterators/async iterators: export function directly, return value detected with a `next` method (argument and return values observably coerced into promises and lifted, optimization will avoid the extra object).
-    - Observables: return the result of either of the following:
-        1. `invoke.observable(observer => ...)`. The `observer` argument is a plain object, and does *not* inherit from the proposal's `%SubscriptionObserverPrototype%`. This is the easiest.
-        2. `invoke.observable(observable)`. Sugar for `invoke.observable(observer => observable.subscribe(observer))`, but verifies the `subscribe` method exists.
+    - Async iterators: export function directly, return value detected with a `Symbol.asyncIterator` method (argument and return values observably coerced into promises and lifted, optimization will avoid the extra object).
+    - Sync iterators: wrap return value in `invoke.iterator(iterable)`, which invokes `Symbol.iterator`, and returns an async iterator.
     - Both initial return values may optionally be wrapped in Promises.
-    - Iterables will *not* be detected (i.e. no `Symbol.iterator` detection); only the iterators themselves.
+    - Arguments and method return values are unwrapped as thenables.
+    - `invoke.iterator(iterable)` also accepts a function to an iterable, and invokes it accordingly, provided it itself is not an iterable.
 
-    For observables in particular, they are initialized lazily, so you have to subscribe to the observable before events are fired. Additionally, each subscription is reflected in the relevant worker instance, and unsubscriptions are also translated across the boundary.
-
-    The parent return value of these will be the following:
-
-    - Async iterators/generators: An object with the proper methods, and polyfill `Symbol.asyncIterator` as appropriate.
-    - Observables: An instance of a local ponyfill, and polyfill `Symbol.observable` as appropriate.
+    The parent return value of these will be an object with the proper methods and with `Symbol.asyncIterator` polyfilled as appropriate. It will inherit from `%AsyncIteratorPrototype%` if it can be found.
 
 2. (v0.2) Route this module's IPC communication through fd 4 (sockets still through `process.send` and fd 3), with a special-purpose binary protocol.
 

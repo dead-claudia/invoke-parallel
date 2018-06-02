@@ -2,10 +2,13 @@
 
 # invoke-parallel
 
+**NOTE: This project is on hold for now, since my upcoming use case hasn't arrived yet, and I lack the time to finish most of the critical TODOs.** 
+
 Simple worker pools done right.
 
 - Very simple, easy-to-use Promise-based API that feels like an extension of the language
 - Low on memory, adaptive to workload
+- Doesn't overload child workers when a lot of tasks are queued all at once (note: this *will* take quite a bit of memory if you're not careful)
 - Highly flexible and configurable
 - Minimal boilerplate, leverages module system and existing idioms
 - Optimized by default for hybrid I/O and CPU workloads
@@ -30,53 +33,107 @@ See [here](https://github.com/isiahmeadows/invoke-parallel/blob/master/api.md).
 
 ## Getting Started
 
-Install this from [npm](https://www.npmjs.com/package/invoke-parallel):
+First, install [npm](https://www.npmjs.com/)/[Yarn](https://yarnpkg.com/) if you haven't already, and then install this from [npm](https://www.npmjs.com/package/invoke-parallel):
 
-```
+```sh
+# Choose one
 $ npm install --save invoke-parallel
+$ yarn add invoke-parallel
 ```
 
-Make a worker:
+Now, we're going to create a simple build system, to demonstrate this module's capabilities. Here's what it's going to do:
+
+- You can run tasks in parallel.
+- Task dependencies are automatically managed.
+- You can specify globs along with the task, and the task runner can iterate those globs for you in parallel.
+- You can specify subtasks for various tasks, and either invoke them individually (like `pmake build:js`) or collectively (like `pmake build`).
+- You can invoke the tasks with a custom config.
+- Tasks (and subtasks) can be specified as promises to their task.
+
+I know that sounds like a *lot*, but it's actually pretty simple.
+
+Note: if you plan to run this, this also has a few other dependencies:
+
+```sh
+# Choose one, depending on what package manager you're using.
+$ npm install --save chalk fancy-log globby minimist
+$ yarn add chalk fancy-log globby minimist
+```
+
+First, let's make a quick utility file for memoization (we need to memoize errors, too, but we only pass JSON-stringifiable data):
+
+```js
+// util.js
+exports.memoize = func => {
+    const cache = new Map()
+    return (...args) => {
+        const key = JSON.stringify(args)
+        const hit = cache.get(key)
+        if (hit != null) return hit
+        const p = new Promise(resolve => resolve(func(...args)))
+        cache.set(key, p)
+        return p
+    }
+}
+```
+
+Next, let's make a worker:
 
 ```js
 // worker.js
 
-// This library works best with `co` or async functions, but this example shows
-// it's not necessary just to use it.
+// This library works best with async functions, but this example shows it's not
+// necessary just to use it.
 const chalk = require("chalk")
 const log = require("fancy-log")
+const {memoize} = require("./util")
+
+const load = memoize(require)
+
+const readTask = memoize((config, name) => {
+    return name.split(":").reduce(
+        (p, part) => p.then(task => {
+            if (task == null) throw new Error(`Task ${name} not found`)
+            return task[part]
+        }),
+        load(config)
+    ).then(task => {
+        if (task == null) throw new Error(`Task ${name} not found`)
+        return task
+    })
+})
 
 exports.getData = (config, name) => {
-    const mod = require(config)
-    const task = tasks[name]
+    return readTask(config, name).then(task => {
+        const result = {files: [], deps: [], invoke: true}
 
-    if (task == null) throw new Error(`Task ${name} not found`)
-    if (typeof task === "function") return {files: [], deps: []}
+        if (Array.isArray(task)) {
+            result.deps = task.filter(item => typeof item === "string")
+            result.files = [].concat(...task.map(item => item.files || []))
+            result.invoke = task.some(item => typeof item === "function")
+        } else if (typeof task === "object") {
+            result.deps = Object.keys(task).map(task => `${name}:${task}`)
+            result.invoke = false
+        }
 
-    return {
-        deps: task.filter(item => typeof item === "string"),
-        files: task.map(item => item.files).filter(files => !!files),
-    }
+        return result
+    })
 }
 
 exports.runTask = (config, name, file) => {
-    const tasks = require(config)
-    const task = tasks[name]
-    let func
-
-    if (typeof task === "function") {
-        log(chalk.blue(`*** Running task ${task}`))
-        return task(opts)
-    } else {
-        log(chalk.blue(`*** Running task ${task}`))
-        for (const func of task) if (typeof func === "function") {
-            return func(opts)
+    return readTask(config, name).then(deps => {
+        for (const task of [].concat(deps)) {
+            if (typeof task === "function") {
+                log(chalk.blue(`*** Running task ${task}`))
+                return func(file).then(() => {})
+            }
         }
-    }
+        return undefined
+    })
 }
 ```
 
-And use it:
+And finally, use it:
 
 ```js
 // pmake.js
@@ -84,6 +141,7 @@ And use it:
 const invoke = require("invoke-parallel")
 const globby = require("globby")
 const log = require("fancy-log")
+const {memoize} = require("./util")
 const args = require("minimist")(process.argv.slice(2), {
     string: ["config"],
     boolean: ["help"],
@@ -92,7 +150,7 @@ const args = require("minimist")(process.argv.slice(2), {
 
 if (args.help) {
     console.log(`
-${process.argv[1]} [ --config config | -c config ] tasks...
+pmake [ --config config | -c config ] tasks...
 
 --config [config], -c [config]
     Use a custom config instead of the default \`make.js\`.
@@ -103,73 +161,155 @@ tasks...
     process.exit()
 }
 
-invoke.require("./worker")
-.then(worker => {
+;(async () => {
     const config = path.resolve(args.config || "make.js")
-    return runTasks(args._.length ? args._ : ["default"])
+    const cancelToken = invoke.cancelToken()
+    const cancelFail = cancelToken.then(() => { throw new invoke.Cancel() })
+    const cancel = () => cancelToken.resolve()
+    const worker = (await invoke.require("./worker"))
+    const tasks = args._.length ? args._ : ["default"]
+    const loadTask = memoize(async task => {
+        const data = await worker({cancelToken}).getData(task)
+        await wrap(Promise.all(data.deps.map(loadTask)))
+        if (data.invoke) {
+            if (data.files.length) {
+                const files = await wrap(globby(data.files))
+                await wrap(Promise.all(files.map(async file => {
+                    await worker({cancelToken}).runTask(config, task, file)
+                })))
+            } else {
+                await worker({cancelToken}).runTask(config, task)
+            }
+        }
+    })
 
-    function runTasks(tasks) {
-        return Promise.all(tasks.map(task => {
-            if (cache[task]) return cache[task]
-            return cache[task] = worker.getData(task)
-            .then(data => {
-                return runTasks(data.deps).then(() => globby(data.files))
-            })
-            .then(files => Promise.all(files.map(file => {
-                return worker.runTask(config, task, file)
-            })))
-        }))
+    // We want to abort *all* pending tasks if we fail.
+    function wrap(p) {
+        return Promise.race([cancelFail, p.catch(e => {
+            cancelToken.resolve()
+            throw e
+        })])
     }
-})
+
+    await Promise.all(tasks.map(loadTask))
+})()
 .then(process.exit, e => {
     log.error(e)
     process.exit(1)
 })
 ```
 
-Now, you've got a super simple task runner, with high parallelism! Here's an example config that can run, with lots of parallelism: (run each task with `node ./dir/to/pmake <task>`)
+Now, you've got a super simple task runner, with super automagically smart parallelism! Here's an example config that can run, with max parallelism: (run each task with `node ./dir/to/pmake <task>`)
 
 ```js
 // make.js
 const path = require("path")
-const co = require("co")
-const fsp = require("fs-promise")
+const fs = require("fs/promises")
 const less = require("less")
-const exec = require("child-exec-promise").exec
+const {exec} = require("child-exec-promise")
 
 module.exports = {
     // No dependencies
-    "lint": () => exec("eslint ."),
+    lint: () => exec("eslint ."),
 
     // Some dependencies
-    "test": ["lint", () => exec("mocha --color")],
+    test: ["lint", () => exec("mocha --color")],
 
-    // Globs, run in parallel
-    "build:less": [{files: "src/**/*.less"}, co.wrap(function *(file){
-        const contents = yield fsp.readFile(file, "utf-8")
-        const css = yield less.render(contents, {filename: file})
-        yield fsp.writeFile(
-            `dest/${path.relative("src", file.slice(0, -5))}.css`,
-            "utf-8", css)
-    })],
+    // Parent task with subtasks
+    build: {
+        // Globs, run in parallel
+        less: [{files: "src/**/*.less"}, async file => {
+            const contents = await fs.readFile(file, "utf-8")
+            const css = await less.render(contents, {filename: file})
+            await fs.writeFile(
+                `dest/${path.relative("src", file.slice(0, -5))}.css`,
+                "utf-8", css
+            )
+        })],
 
-    // Globs with deps
-    "build:js": ["test", {files: "src/**/*.js"}, file =>
-        fsp.copy(file, `dest/${path.relative("src", file)}`)
-    ],
-
-    // Just deps, run in parallel
-    "build": ["build:js", "build:less"],
+        // Globs with deps
+        js: ["test", {files: "src/**/*.js"}, file =>
+            fs.copyFile(file, `dest/${path.relative("src", file)}`)
+        ],
+    },
 }
 ```
 
 It's much better than this mostly equivalent synchronous code, though (and much faster, too):
 
 ```js
+// util.js
+exports.memoize = func => {
+    const cache = new Map()
+    return (...args) => {
+        const key = JSON.stringify(args)
+        const hit = cache.get(key)
+        if (hit != null) {
+            if (hit.success) return hit.value
+            throw hit.value
+        }
+        let success = true
+        let value
+        try {
+            return value = func(...args)
+        } catch (e) {
+            success = false
+            throw value = e
+        } finally {
+            cache.set(key, {success, value})
+        }
+    }
+}
+
+// worker.js
+const chalk = require("chalk")
+const log = require("fancy-log")
+const {memoize} = require("./util")
+
+const load = memoize(require)
+
+const readTask = memoize((config, name) => {
+    let task = load(config)
+    for (const part of name.split(":")) {
+        if (task == null) throw new Error(`Task ${name} not found`)
+        task = task[part]
+    }
+    if (task == null) throw new Error(`Task ${name} not found`)
+    return task
+})
+
+exports.getData = (config, name) => {
+    const task = readTask(config, name)
+    const result = {files: [], deps: [], invoke: true}
+
+    if (Array.isArray(task)) {
+        result.deps = task.filter(item => typeof item === "string")
+        result.files = [].concat(...task.map(item => item.files || []))
+        result.invoke = task.some(item => typeof item === "function")
+    } else if (typeof task === "object") {
+        result.deps = Object.keys(task).map(task => `${name}:${task}`)
+        result.invoke = false
+    }
+
+    return result
+}
+
+exports.runTask = (config, name, file) => {
+    const deps = readTask(config, name)
+    for (const task of [].concat(deps)) {
+        if (typeof task === "function") {
+            log(chalk.blue(`*** Running task ${task}`))
+            func(file)
+            return
+        }
+    }
+}
+
 // not-so-parallel-make.js
 const worker = require("./worker")
 const globby = require("globby")
 const log = require("fancy-log")
+const {memoize} = require("./util")
 const args = require("minimist")(process.argv.slice(2), {
     boolean: ["help"],
     string: ["config"],
@@ -178,7 +318,7 @@ const args = require("minimist")(process.argv.slice(2), {
 
 if (args.help) {
     console.log(`
-${process.argv[1]} [ --config config | -c config ] tasks...
+pmake [ --config config | -c config ] tasks...
 
 --config [config], -c [config]
     Use a custom config instead of the default \`make.js\`.
@@ -190,24 +330,28 @@ tasks...
 }
 
 try {
-    const tasks = args._
-    if (tasks.length === 0) tasks.push("default")
-    const config = path.resolve(process.cwd(), args.config || "make.js")
-    const taskList = require(config)
-    const cache = Object.create(null)
+    const config = path.resolve(args.config || "make.js")
+    const tasks = args._.length ? args._ : ["default"]
+    const runTask = memoize(task => {
+        const data = worker.getData(task)
 
-    function runTasks(tasks) {
-        for (const task of tasks) if (!cache[task]) {
-            cache[task] = true
-            const data = worker.getData(task)
-            runTasks(data.deps)
-            for (const file of globby.sync(data.files)) {
-                worker.runTask(config, task, file)
+        for (const task of data.deps) runTask(task)
+
+        if (data.invoke) {
+            if (data.files.length) {
+                const files = globby(data.files)
+                for (const file of files) {
+                    worker.runTask(config, task, file)
+                }
+            } else {
+                worker.runTask(config, task)
             }
         }
-    }
+    })
 
-    runTasks(tasks)
+    for (const task of tasks) {
+        runTask(task)
+    }
 } catch (e) {
     log.error(e)
     throw e
